@@ -59,6 +59,7 @@ export default function LogWorkout() {
   if (step === 'split') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
+        <button onClick={() => navigate('/')} className="absolute top-5 left-5 text-gray-400 hover:text-white text-2xl leading-none">←</button>
         <div className="text-2xl font-extrabold text-white mb-4">Today's Workout</div>
         <button
           onClick={() => handleSplitSelect('upper')}
@@ -79,6 +80,7 @@ export default function LogWorkout() {
   if (step === 'muscle') {
     return (
       <div className="flex flex-col items-center px-6 py-10 gap-3 max-w-sm mx-auto">
+        <button onClick={() => setStep('split')} className="self-start text-gray-400 hover:text-white text-2xl leading-none mb-2">←</button>
         <div className="text-xs font-bold text-gray-500 tracking-widest">{split?.toUpperCase()}</div>
         <div className="text-2xl font-extrabold text-white mb-4">What are you training?</div>
         {groups.map((mg) => (
@@ -227,6 +229,10 @@ export default function LogWorkout() {
         )}
 
         {/* Header */}
+        <button
+          onClick={() => exerciseIndex === 0 ? setStep('muscle') : setExerciseIndex((i) => i - 1)}
+          className="self-start text-gray-400 hover:text-white text-2xl leading-none mb-4"
+        >←</button>
         <div className="text-xs font-bold text-gray-500 tracking-widest text-center mb-1">
           {MUSCLE_GROUPS[muscleGroup].label.toUpperCase()} · Exercise {exerciseIndex + 1} of {exerciseStates.length}
         </div>
