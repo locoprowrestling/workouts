@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MUSCLE_GROUPS, UPPER_GROUPS, LOWER_GROUPS } from '../constants/muscleGroups';
 import type { Split, MuscleGroup } from '../constants/muscleGroups';
@@ -28,6 +28,7 @@ export default function LogWorkout() {
   const [skipConfirming, setSkipConfirming] = useState(false);
   const [skipCount, setSkipCount] = useState(0);
   const [newPR, setNewPR] = useState<{ exerciseName: string; weight: number; reps: number } | null>(null);
+  const sessionBestRef = useRef<Map<string, { weight: number; reps: number }>>(new Map());
 
   useEffect(() => {
     if (muscleGroup) {
@@ -122,10 +123,14 @@ export default function LogWorkout() {
           const w = parseFloat(log.weight);
           const r = parseInt(log.reps);
           if (w > 0 && r > 0) {
-            const currentPR = getPR(updatedEx.name, state.sessions);
-            const beatsWeight = !currentPR || w > currentPR.weight;
-            const beatsReps = currentPR && w === currentPR.weight && r > currentPR.reps;
-            if (beatsWeight || beatsReps) {
+            const histPR = getPR(updatedEx.name, state.sessions);
+            const sessionBest = sessionBestRef.current.get(updatedEx.name.toLowerCase());
+
+            const beatsHistorical = !histPR || w > histPR.weight || (w === histPR.weight && r > histPR.reps);
+            const beatsSession = !sessionBest || w > sessionBest.weight || (w === sessionBest.weight && r > sessionBest.reps);
+
+            if (beatsHistorical && beatsSession) {
+              sessionBestRef.current.set(updatedEx.name.toLowerCase(), { weight: w, reps: r });
               setTimeout(() => setNewPR({ exerciseName: updatedEx.name, weight: w, reps: r }), 0);
             }
           }
