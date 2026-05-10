@@ -1,193 +1,340 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { WorkoutType, WorkoutTemplate, Exercise } from '../types';
+import { MUSCLE_GROUPS, UPPER_GROUPS, LOWER_GROUPS } from '../constants/muscleGroups';
+import type { Split, MuscleGroup } from '../constants/muscleGroups';
 import { useApp } from '../context/AppContext';
-import { calculateXP } from '../lib/xp';
-import { WORKOUT_TEMPLATES } from '../constants/workoutTemplates';
-import WorkoutTypeSelector from '../components/workout/WorkoutTypeSelector';
-import ExerciseList from '../components/workout/ExerciseList';
-import { ChevronLeft } from 'lucide-react';
+import { getPR } from '../lib/pr';
+import type { PRRecord } from '../lib/pr';
+import NewPRToast from '../components/ui/NewPRToast';
 
-function templateToExercises(templateId: WorkoutTemplate): Exercise[] {
-  const tmpl = WORKOUT_TEMPLATES.find((t) => t.id === templateId);
-  if (!tmpl) return [];
-  return tmpl.exercises.map((ex) => ({
-    id: crypto.randomUUID(),
-    name: ex.name,
-    sets: ex.sets,
-    reps: ex.targetMinReps,
-    targetMinReps: ex.targetMinReps,
-    targetMaxReps: ex.targetMaxReps,
-    weight: 0,
-    weightUnit: 'lbs' as const,
-    progressionUnlocked: false,
-  }));
+interface SetLog { weight: string; reps: string; }
+interface ExerciseState {
+  name: string;
+  sets: number;
+  logs: (SetLog | null)[];
+  skipped: boolean;
 }
 
+type Step = 'split' | 'muscle' | 'exercise';
+
 export default function LogWorkout() {
-  const { state, addWorkout } = useApp();
   const navigate = useNavigate();
+  const [step, setStep] = useState<Step>('split');
+  const [split, setSplit] = useState<Split | null>(null);
+  const [muscleGroup, setMuscleGroup] = useState<MuscleGroup | null>(null);
+  const { state, addWorkout } = useApp();
+  const [exerciseIndex, setExerciseIndex] = useState(0);
+  const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>([]);
+  const [skipConfirming, setSkipConfirming] = useState(false);
+  const [skipCount, setSkipCount] = useState(0);
+  const [newPR, setNewPR] = useState<{ exerciseName: string; weight: number; reps: number } | null>(null);
+  const sessionBestRef = useRef<Map<string, { weight: number; reps: number }>>(new Map());
 
-  const [templateId, setTemplateId] = useState<WorkoutTemplate>('A');
-  const [type, setType] = useState<WorkoutType>('strength');
-  const [duration, setDuration] = useState(45);
-  const [exercises, setExercises] = useState<Exercise[]>(() => templateToExercises('A'));
-  const [conditioning, setConditioning] = useState('');
-  const [notes, setNotes] = useState('');
+  useEffect(() => {
+    if (muscleGroup) {
+      setExerciseStates(
+        MUSCLE_GROUPS[muscleGroup].exercises.map((ex) => ({
+          name: ex.name,
+          sets: ex.sets,
+          logs: Array(ex.sets).fill(null),
+          skipped: false,
+        }))
+      );
+      setExerciseIndex(0);
+    }
+  }, [muscleGroup]);
 
-  function handleTemplateChange(id: WorkoutTemplate) {
-    setTemplateId(id);
-    if (id === 'custom') {
-      setExercises([]);
-    } else {
-      const tmpl = WORKOUT_TEMPLATES.find((t) => t.id === id);
-      if (tmpl) {
-        setType(tmpl.type);
-        setExercises(templateToExercises(id));
-        setConditioning(tmpl.conditioning);
+  function handleSplitSelect(s: Split) {
+    setSplit(s);
+    setStep('muscle');
+  }
+
+  function handleMuscleSelect(mg: MuscleGroup) {
+    setMuscleGroup(mg);
+    setStep('exercise');
+  }
+
+  const groups = split === 'upper' ? UPPER_GROUPS : LOWER_GROUPS;
+
+  if (step === 'split') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
+        <div className="text-2xl font-extrabold text-white mb-4">Today's Workout</div>
+        <button
+          onClick={() => handleSplitSelect('upper')}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-3xl py-14 rounded-2xl transition-colors tracking-wide"
+        >
+          UPPER
+        </button>
+        <button
+          onClick={() => handleSplitSelect('lower')}
+          className="w-full bg-gray-900 hover:bg-gray-800 text-gray-400 border-2 border-gray-700 font-extrabold text-3xl py-14 rounded-2xl transition-colors tracking-wide"
+        >
+          LOWER
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'muscle') {
+    return (
+      <div className="flex flex-col items-center px-6 py-10 gap-3 max-w-sm mx-auto">
+        <div className="text-xs font-bold text-gray-500 tracking-widest">{split?.toUpperCase()}</div>
+        <div className="text-2xl font-extrabold text-white mb-4">What are you training?</div>
+        {groups.map((mg) => (
+          <button
+            key={mg}
+            onClick={() => handleMuscleSelect(mg)}
+            className="w-full bg-gray-900 hover:bg-gray-800 text-gray-300 border-2 border-gray-700 font-bold text-xl py-5 rounded-2xl transition-colors"
+          >
+            {MUSCLE_GROUPS[mg].label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (step === 'exercise' && muscleGroup) {
+    const ex = exerciseStates[exerciseIndex];
+    if (!ex) return null;
+
+    const pr: PRRecord | null = getPR(ex.name, state.sessions);
+    const nextEx = exerciseStates[exerciseIndex + 1] ?? null;
+    const nextPR: PRRecord | null = nextEx ? getPR(nextEx.name, state.sessions) : null;
+    const isLast = exerciseIndex === exerciseStates.length - 1;
+
+    const activeSetIndex = ex.logs.findIndex((l) => l === null || l.weight === '' || l.reps === '');
+
+    function updateSetLog(setIdx: number, field: 'weight' | 'reps', value: string) {
+      setExerciseStates((prev) => {
+        const updated = prev.map((e, i) => {
+          if (i !== exerciseIndex) return e;
+          const logs = e.logs.map((l, li) => {
+            if (li !== setIdx) return l;
+            return { ...(l ?? { weight: '', reps: '' }), [field]: value };
+          });
+          return { ...e, logs };
+        });
+
+        // Check for new PR when both weight and reps are filled
+        const updatedEx = updated[exerciseIndex];
+        const log = updatedEx.logs[setIdx];
+        if (log && log.weight !== '' && log.reps !== '') {
+          const w = parseFloat(log.weight);
+          const r = parseInt(log.reps);
+          if (w > 0 && r > 0) {
+            const histPR = getPR(updatedEx.name, state.sessions);
+            const sessionBest = sessionBestRef.current.get(updatedEx.name.toLowerCase());
+
+            const beatsHistorical = !histPR || w > histPR.weight || (w === histPR.weight && r > histPR.reps);
+            const beatsSession = !sessionBest || w > sessionBest.weight || (w === sessionBest.weight && r > sessionBest.reps);
+
+            if (beatsHistorical && beatsSession) {
+              sessionBestRef.current.set(updatedEx.name.toLowerCase(), { weight: w, reps: r });
+              setTimeout(() => setNewPR({ exerciseName: updatedEx.name, weight: w, reps: r }), 0);
+            }
+          }
+        }
+
+        return updated;
+      });
+    }
+
+    function saveWorkout(penalty = 0) {
+      if (!split || !muscleGroup) return;
+      const exercises = exerciseStates.map((ex) => {
+        const filledLogs = ex.logs.filter((l): l is SetLog => l !== null);
+        return {
+          id: crypto.randomUUID(),
+          name: ex.name,
+          sets: ex.sets,
+          reps: filledLogs.length > 0 ? Math.max(...filledLogs.map((l) => parseInt(l.reps) || 0)) : 0,
+          weight: filledLogs.length > 0 ? Math.max(...filledLogs.map((l) => parseFloat(l.weight) || 0)) : 0,
+          targetMinReps: 8,
+          targetMaxReps: 12,
+          weightUnit: 'lbs' as const,
+          progressionUnlocked: false,
+          setLogs: filledLogs.map((l) => ({ weight: parseFloat(l.weight) || 0, reps: parseInt(l.reps) || 0 })),
+        };
+      });
+      addWorkout({
+        date: new Date().toISOString().split('T')[0],
+        type: 'strength',
+        templateId: null,
+        durationMinutes: 60,
+        exercises,
+        conditioningNotes: '',
+        notes: '',
+      }, penalty);
+      navigate('/');
+    }
+
+    function handleSkipConfirm() {
+      setExerciseStates((prev) =>
+        prev.map((e, i) => (i === exerciseIndex ? { ...e, skipped: true } : e))
+      );
+      const newSkipCount = skipCount + 1;
+      setSkipCount(newSkipCount);
+      setSkipConfirming(false);
+      if (isLast) {
+        saveWorkout(newSkipCount * 10);
+      } else {
+        setExerciseIndex((i) => i + 1);
       }
     }
-  }
 
-  const previewXP = useMemo(() => {
-    const draft = { date: new Date().toISOString().split('T')[0], type, templateId, durationMinutes: duration, exercises, conditioningNotes: conditioning, notes };
-    return calculateXP(draft, state.profile);
-  }, [type, duration, exercises, conditioning, notes, state.profile, templateId]);
+    function handleDone() {
+      if (isLast) {
+        saveWorkout(skipCount * 10);
+      } else {
+        setExerciseIndex((i) => i + 1);
+      }
+    }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    addWorkout({
-      date: new Date().toISOString().split('T')[0],
-      type,
-      templateId,
-      durationMinutes: duration,
-      exercises,
-      conditioningNotes: conditioning,
-      notes,
-    });
-    navigate('/');
-  }
+    return (
+      <div className="flex flex-col px-5 py-8 max-w-sm mx-auto min-h-screen">
+        {newPR && (
+          <NewPRToast
+            exerciseName={newPR.exerciseName}
+            weight={newPR.weight}
+            reps={newPR.reps}
+            onDismiss={() => setNewPR(null)}
+          />
+        )}
 
-  const currentTemplate = WORKOUT_TEMPLATES.find((t) => t.id === templateId);
+        {/* Skip confirmation overlay */}
+        {skipConfirming && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm">
+              <div className="text-white font-extrabold text-lg mb-2">Skip {ex.name}?</div>
+              <div className="text-gray-400 text-sm mb-6">This will cost you 10 XP.</div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSkipConfirming(false)}
+                  className="flex-1 bg-gray-800 text-gray-300 font-bold py-3 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSkipConfirm}
+                  className="flex-1 bg-red-900 hover:bg-red-800 text-red-300 font-bold py-3 rounded-xl transition-colors"
+                >
+                  Skip (−10 XP)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
-  return (
-    <form onSubmit={handleSubmit} className="px-4 py-6 max-w-lg mx-auto flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={() => navigate(-1)} className="text-gray-400 hover:text-white">
-          <ChevronLeft size={24} />
-        </button>
-        <h1 className="text-2xl font-bold text-white">Log Workout</h1>
-      </div>
+        {/* Header */}
+        <div className="text-xs font-bold text-gray-500 tracking-widest text-center mb-1">
+          {MUSCLE_GROUPS[muscleGroup].label.toUpperCase()} · Exercise {exerciseIndex + 1} of {exerciseStates.length}
+        </div>
+        <div className="text-xl font-extrabold text-white text-center mb-3">{ex.name}</div>
 
-      {/* Template Picker */}
-      <div>
-        <label className="text-sm font-semibold text-gray-300 mb-2 block">Choose Template</label>
-        <div className="grid grid-cols-3 gap-3">
-          {[...WORKOUT_TEMPLATES.map((t) => t.id as WorkoutTemplate), 'custom' as WorkoutTemplate].map((id) => {
-            const tmpl = WORKOUT_TEMPLATES.find((t) => t.id === id);
+        {/* PR Badge */}
+        {pr ? (
+          <div className="bg-stone-900 border border-amber-800 rounded-xl px-4 py-3 flex items-center justify-between mb-5">
+            <div className="text-xs font-bold text-stone-500 tracking-widest">🏆 PR</div>
+            <div className="text-amber-400 text-lg font-extrabold">{pr.weight} lbs × {pr.reps}</div>
+          </div>
+        ) : (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-center text-gray-600 text-sm mb-5">
+            No PR yet — set one today!
+          </div>
+        )}
+
+        {/* Set Grid */}
+        <div className="flex flex-col gap-3 mb-5">
+          <div className="grid grid-cols-[52px_1fr_1fr] gap-2 items-center">
+            <div />
+            <div className="text-xs text-center font-bold text-gray-500 tracking-widest">LBS</div>
+            <div className="text-xs text-center font-bold text-gray-500 tracking-widest">REPS</div>
+          </div>
+
+          {ex.logs.map((log, setIdx) => {
+            const isDone = log !== null && log.weight !== '' && log.reps !== '';
+            const isActive = setIdx === activeSetIndex;
+            const isPending = !isDone && !isActive;
+            const doneLog = isDone ? log : null;
+
             return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleTemplateChange(id)}
-                className={`rounded-xl p-3 text-sm font-semibold border-2 transition-all ${
-                  templateId === id
-                    ? 'border-indigo-500 bg-indigo-950 text-white'
-                    : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600'
-                }`}
-              >
-                {tmpl ? (
-                  <>
-                    <div className="font-bold">{tmpl.name}</div>
-                    <div className="text-xs font-normal text-gray-500 mt-0.5">{tmpl.focus.split(' · ')[0]}</div>
-                  </>
+              <div key={setIdx} className={`grid grid-cols-[52px_1fr_1fr] gap-2 items-center ${isPending ? 'opacity-35' : ''}`}>
+                <div className={`text-sm font-bold ${isDone ? 'text-green-400' : 'text-gray-400'}`}>
+                  {isDone ? `Set ${setIdx + 1} ✓` : `Set ${setIdx + 1}`}
+                </div>
+
+                {doneLog !== null ? (
+                  <div className="bg-green-950 border border-green-800 rounded-xl text-green-400 text-center py-3 text-lg font-bold">
+                    {doneLog.weight || '—'}
+                  </div>
                 ) : (
-                  <div>Custom</div>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder={pr ? String(pr.weight) : '0'}
+                    value={log?.weight ?? ''}
+                    disabled={isPending}
+                    onChange={(e) => updateSetLog(setIdx, 'weight', e.target.value)}
+                    className={`bg-gray-900 rounded-xl text-white text-center py-3 text-lg font-bold w-full outline-none border-2 ${
+                      isActive ? 'border-indigo-500' : 'border-gray-800'
+                    }`}
+                  />
                 )}
-              </button>
+
+                {doneLog !== null ? (
+                  <div className="bg-green-950 border border-green-800 rounded-xl text-green-400 text-center py-3 text-lg font-bold">
+                    {doneLog.reps || '—'}
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="—"
+                    value={log?.reps ?? ''}
+                    disabled={isPending}
+                    onChange={(e) => updateSetLog(setIdx, 'reps', e.target.value)}
+                    className={`bg-gray-900 rounded-xl text-white text-center py-3 text-lg font-bold w-full outline-none border-2 ${
+                      isActive ? 'border-indigo-500' : 'border-gray-800'
+                    }`}
+                  />
+                )}
+              </div>
             );
           })}
         </div>
-        {currentTemplate && (
-          <p className="text-xs text-gray-500 mt-2">{currentTemplate.conditioning}</p>
+
+        {/* Up Next */}
+        {nextEx && (
+          <div className="mb-4">
+            <div className="text-xs font-bold text-gray-600 tracking-widest mb-1">UP NEXT</div>
+            <div className="bg-gray-900 rounded-xl px-4 py-3 flex justify-between items-center">
+              <div className="text-gray-400 font-semibold">{nextEx.name}</div>
+              {nextPR && (
+                <div className="text-gray-500 text-sm font-semibold">🏆 {nextPR.weight} lbs</div>
+              )}
+            </div>
+          </div>
         )}
-      </div>
 
-      {/* Workout Type (for custom) */}
-      {templateId === 'custom' && (
-        <div>
-          <label className="text-sm font-semibold text-gray-300 mb-2 block">Workout Type</label>
-          <WorkoutTypeSelector value={type} onChange={setType} />
-        </div>
-      )}
-
-      {/* Duration */}
-      <div>
-        <label className="text-sm font-semibold text-gray-300 mb-2 block flex-shrink-0">
-          Duration: <span className="text-indigo-400">{duration} min</span>
-        </label>
-        <input
-          type="range"
-          min={15}
-          max={180}
-          step={5}
-          value={duration}
-          onChange={(e) => setDuration(parseInt(e.target.value))}
-          className="w-full accent-indigo-500"
-        />
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
-          <span>15 min</span><span>3 hrs</span>
-        </div>
-      </div>
-
-      {/* Exercises */}
-      {(type === 'strength' || templateId !== 'custom') && (
-        <div>
-          <label className="text-sm font-semibold text-gray-300 mb-2 block">Exercises</label>
-          <ExerciseList exercises={exercises} onChange={setExercises} />
-        </div>
-      )}
-
-      {/* Conditioning */}
-      <div>
-        <label className="text-sm font-semibold text-gray-300 mb-2 block">
-          Conditioning <span className="text-gray-500 font-normal">(optional — +25 XP)</span>
-        </label>
-        <textarea
-          className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-          rows={2}
-          placeholder={currentTemplate?.conditioning ?? 'e.g. 15 min treadmill walk'}
-          value={conditioning}
-          onChange={(e) => setConditioning(e.target.value)}
-        />
-      </div>
-
-      {/* Notes */}
-      <div>
-        <label className="text-sm font-semibold text-gray-300 mb-2 block">Notes</label>
-        <textarea
-          className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-          rows={2}
-          placeholder="How did it feel? Any PRs?"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-      </div>
-
-      {/* XP Preview + Submit */}
-      <div className="bg-indigo-950 border border-indigo-800 rounded-xl p-4 flex items-center justify-between">
-        <div>
-          <div className="text-xs text-indigo-400">This workout will earn</div>
-          <div className="text-2xl font-bold text-white">+{previewXP} XP</div>
-        </div>
+        {/* Done / Finish button */}
         <button
-          type="submit"
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-3 rounded-xl transition-colors text-sm"
+          onClick={handleDone}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-lg py-5 rounded-2xl transition-colors mt-auto"
         >
-          Log Workout 💪
+          {isLast ? 'Finish Workout ✓' : 'Done with this exercise →'}
+        </button>
+
+        {/* Skip link */}
+        <button
+          onClick={() => setSkipConfirming(true)}
+          className="text-gray-600 text-sm font-medium mt-3 text-center w-full hover:text-gray-400 transition-colors"
+        >
+          Skip this exercise
         </button>
       </div>
-    </form>
-  );
+    );
+  }
+
+  return null;
 }

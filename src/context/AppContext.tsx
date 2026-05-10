@@ -12,7 +12,7 @@ interface AppState extends AppStorage {
 }
 
 type Action =
-  | { type: 'ADD_WORKOUT'; session: Omit<WorkoutSession, 'id' | 'xpEarned'> }
+  | { type: 'ADD_WORKOUT'; session: Omit<WorkoutSession, 'id' | 'xpEarned'>; xpPenalty?: number }
   | { type: 'DISMISS_BADGE' }
   | { type: 'RESET_QUESTS_IF_NEEDED' };
 
@@ -28,7 +28,7 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case 'ADD_WORKOUT': {
-      const xpEarned = calculateXP(action.session, state.profile);
+      const xpEarned = Math.max(0, calculateXP(action.session, state.profile) - (action.xpPenalty ?? 0));
       const newSession: WorkoutSession = {
         ...action.session,
         id: crypto.randomUUID(),
@@ -86,7 +86,7 @@ function reducer(state: AppState, action: Action): AppState {
 
 interface AppContextValue {
   state: AppState;
-  addWorkout: (session: Omit<WorkoutSession, 'id' | 'xpEarned'>) => void;
+  addWorkout: (session: Omit<WorkoutSession, 'id' | 'xpEarned'>, xpPenalty?: number) => void;
   dismissBadge: () => void;
 }
 
@@ -102,8 +102,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'RESET_QUESTS_IF_NEEDED' });
   }, []);
 
-  const addWorkout = useCallback((session: Omit<WorkoutSession, 'id' | 'xpEarned'>) => {
-    dispatch({ type: 'ADD_WORKOUT', session });
+  const addWorkout = useCallback((session: Omit<WorkoutSession, 'id' | 'xpEarned'>, xpPenalty?: number) => {
+    dispatch({ type: 'ADD_WORKOUT', session, xpPenalty });
   }, []);
 
   const dismissBadge = useCallback(() => {
