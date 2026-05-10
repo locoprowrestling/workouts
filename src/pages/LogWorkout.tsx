@@ -98,7 +98,7 @@ export default function LogWorkout() {
     const nextPR: PRRecord | null = nextEx ? getPR(nextEx.name, state.sessions) : null;
     const isLast = exerciseIndex === exerciseStates.length - 1;
 
-    const activeSetIndex = ex.logs.findIndex((l) => l === null);
+    const activeSetIndex = ex.logs.findIndex((l) => l === null || l.weight === '' || l.reps === '');
 
     function updateSetLog(setIdx: number, field: 'weight' | 'reps', value: string) {
       setExerciseStates((prev) =>
@@ -179,7 +179,7 @@ export default function LogWorkout() {
           </div>
 
           {ex.logs.map((log, setIdx) => {
-            const isDone = log !== null;
+            const isDone = log !== null && log.weight !== '' && log.reps !== '';
             const isActive = setIdx === activeSetIndex;
             const isPending = !isDone && !isActive;
             const doneLog = isDone ? log : null;
