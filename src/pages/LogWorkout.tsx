@@ -238,6 +238,16 @@ export default function LogWorkout() {
         </div>
         <div className="text-xl font-extrabold text-white text-center mb-3">{ex.name}</div>
 
+        {/* YouTube form link */}
+        <a
+          href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex.name + ' proper form tutorial')}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 bg-red-950 border border-red-800 hover:bg-red-900 text-red-400 font-bold text-sm py-2.5 rounded-xl transition-colors mb-4"
+        >
+          <span>▶</span> Watch Form on YouTube
+        </a>
+
         {/* PR Badge */}
         {pr ? (
           <div className="bg-stone-900 border border-amber-800 rounded-xl px-4 py-3 flex items-center justify-between mb-5">
