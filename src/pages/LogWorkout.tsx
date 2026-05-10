@@ -24,6 +24,8 @@ export default function LogWorkout() {
   const { state, addWorkout } = useApp();
   const [exerciseIndex, setExerciseIndex] = useState(0);
   const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>([]);
+  const [skipConfirming, setSkipConfirming] = useState(false);
+  const [skipCount, setSkipCount] = useState(0);
 
   useEffect(() => {
     if (muscleGroup) {
@@ -142,9 +144,23 @@ export default function LogWorkout() {
       navigate('/');
     }
 
+    function handleSkipConfirm() {
+      setExerciseStates((prev) =>
+        prev.map((e, i) => (i === exerciseIndex ? { ...e, skipped: true } : e))
+      );
+      const newSkipCount = skipCount + 1;
+      setSkipCount(newSkipCount);
+      setSkipConfirming(false);
+      if (isLast) {
+        saveWorkout(newSkipCount * 10);
+      } else {
+        setExerciseIndex((i) => i + 1);
+      }
+    }
+
     function handleDone() {
       if (isLast) {
-        saveWorkout(0);
+        saveWorkout(skipCount * 10);
       } else {
         setExerciseIndex((i) => i + 1);
       }
@@ -152,6 +168,30 @@ export default function LogWorkout() {
 
     return (
       <div className="flex flex-col px-5 py-8 max-w-sm mx-auto min-h-screen">
+        {/* Skip confirmation overlay */}
+        {skipConfirming && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm">
+              <div className="text-white font-extrabold text-lg mb-2">Skip {ex.name}?</div>
+              <div className="text-gray-400 text-sm mb-6">This will cost you 10 XP.</div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSkipConfirming(false)}
+                  className="flex-1 bg-gray-800 text-gray-300 font-bold py-3 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSkipConfirm}
+                  className="flex-1 bg-red-900 hover:bg-red-800 text-red-300 font-bold py-3 rounded-xl transition-colors"
+                >
+                  Skip (−10 XP)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-xs font-bold text-gray-500 tracking-widest text-center mb-1">
           {MUSCLE_GROUPS[muscleGroup].label.toUpperCase()} · Exercise {exerciseIndex + 1} of {exerciseStates.length}
@@ -249,6 +289,14 @@ export default function LogWorkout() {
           className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-lg py-5 rounded-2xl transition-colors mt-auto"
         >
           {isLast ? 'Finish Workout ✓' : 'Done with this exercise →'}
+        </button>
+
+        {/* Skip link */}
+        <button
+          onClick={() => setSkipConfirming(true)}
+          className="text-gray-600 text-sm font-medium mt-3 text-center w-full hover:text-gray-400 transition-colors"
+        >
+          Skip this exercise
         </button>
       </div>
     );
