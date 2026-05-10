@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MUSCLE_GROUPS, UPPER_GROUPS, LOWER_GROUPS } from '../constants/muscleGroups';
-import type { Split, MuscleGroup } from '../constants/muscleGroups';
+import type { Split, MuscleGroup, ExerciseDef } from '../constants/muscleGroups';
 import { useApp } from '../context/AppContext';
 import { getPR } from '../lib/pr';
 import type { PRRecord } from '../lib/pr';
@@ -15,13 +15,14 @@ interface ExerciseState {
   skipped: boolean;
 }
 
-type Step = 'split' | 'muscle' | 'exercise';
+type Step = 'split' | 'muscle' | 'order' | 'exercise';
 
 export default function LogWorkout() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>('split');
   const [split, setSplit] = useState<Split | null>(null);
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup | null>(null);
+  const [orderedExercises, setOrderedExercises] = useState<ExerciseDef[]>([]);
   const { state, addWorkout } = useApp();
   const [exerciseIndex, setExerciseIndex] = useState(0);
   const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>([]);
@@ -32,17 +33,31 @@ export default function LogWorkout() {
 
   useEffect(() => {
     if (muscleGroup) {
-      setExerciseStates(
-        MUSCLE_GROUPS[muscleGroup].exercises.map((ex) => ({
-          name: ex.name,
-          sets: ex.sets,
-          logs: Array(ex.sets).fill(null),
-          skipped: false,
-        }))
-      );
-      setExerciseIndex(0);
+      setOrderedExercises([...MUSCLE_GROUPS[muscleGroup].exercises]);
+      setStep('order');
     }
   }, [muscleGroup]);
+
+  function startWorkout() {
+    setExerciseStates(
+      orderedExercises.map((ex) => ({
+        name: ex.name,
+        sets: ex.sets,
+        logs: Array(ex.sets).fill(null),
+        skipped: false,
+      }))
+    );
+    setExerciseIndex(0);
+    setStep('exercise');
+  }
+
+  function moveExercise(index: number, direction: -1 | 1) {
+    const next = [...orderedExercises];
+    const swapIdx = index + direction;
+    if (swapIdx < 0 || swapIdx >= next.length) return;
+    [next[index], next[swapIdx]] = [next[swapIdx], next[index]];
+    setOrderedExercises(next);
+  }
 
   function handleSplitSelect(s: Split) {
     setSplit(s);
@@ -51,11 +66,11 @@ export default function LogWorkout() {
 
   function handleMuscleSelect(mg: MuscleGroup) {
     setMuscleGroup(mg);
-    setStep('exercise');
   }
 
   const groups = split === 'upper' ? UPPER_GROUPS : LOWER_GROUPS;
 
+  // ── Split screen ──────────────────────────────────────────────────────────
   if (step === 'split') {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
@@ -77,6 +92,7 @@ export default function LogWorkout() {
     );
   }
 
+  // ── Muscle group screen ───────────────────────────────────────────────────
   if (step === 'muscle') {
     return (
       <div className="flex flex-col items-center px-6 py-10 gap-3 max-w-sm mx-auto">
@@ -96,10 +112,55 @@ export default function LogWorkout() {
     );
   }
 
+  // ── Order screen ──────────────────────────────────────────────────────────
+  if (step === 'order' && muscleGroup) {
+    return (
+      <div className="flex flex-col px-6 py-10 max-w-sm mx-auto gap-4">
+        <button onClick={() => setStep('muscle')} className="self-start text-gray-400 hover:text-white text-2xl leading-none">←</button>
+        <div>
+          <div className="text-xs font-bold text-gray-500 tracking-widest">{MUSCLE_GROUPS[muscleGroup].label.toUpperCase()}</div>
+          <div className="text-2xl font-extrabold text-white mt-1">Exercise Order</div>
+          <div className="text-sm text-gray-500 mt-1">Drag to reorder, or tap ↑↓ for variety</div>
+        </div>
+        <div className="flex flex-col gap-2">
+          {orderedExercises.map((ex, i) => (
+            <div key={ex.name} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex items-center gap-3">
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => moveExercise(i, -1)}
+                  disabled={i === 0}
+                  className="text-gray-500 hover:text-white disabled:opacity-20 leading-none text-lg"
+                >↑</button>
+                <button
+                  onClick={() => moveExercise(i, 1)}
+                  disabled={i === orderedExercises.length - 1}
+                  className="text-gray-500 hover:text-white disabled:opacity-20 leading-none text-lg"
+                >↓</button>
+              </div>
+              <div className="flex-1">
+                <div className="font-bold text-white text-sm">{ex.name}</div>
+                <div className="text-xs text-gray-500">{ex.sets} sets</div>
+              </div>
+              <div className="text-xs text-gray-600 font-mono">{i + 1}</div>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={startWorkout}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-lg py-5 rounded-2xl transition-colors mt-2"
+        >
+          Start Workout →
+        </button>
+      </div>
+    );
+  }
+
+  // ── Exercise screen ───────────────────────────────────────────────────────
   if (step === 'exercise' && muscleGroup) {
     const ex = exerciseStates[exerciseIndex];
     if (!ex) return null;
 
+    const exDef = orderedExercises[exerciseIndex];
     const pr: PRRecord | null = getPR(ex.name, state.sessions);
     const nextEx = exerciseStates[exerciseIndex + 1] ?? null;
     const nextPR: PRRecord | null = nextEx ? getPR(nextEx.name, state.sessions) : null;
@@ -118,7 +179,6 @@ export default function LogWorkout() {
           return { ...e, logs };
         });
 
-        // Check for new PR when both weight and reps are filled
         const updatedEx = updated[exerciseIndex];
         const log = updatedEx.logs[setIdx];
         if (log && log.weight !== '' && log.reps !== '') {
@@ -127,10 +187,8 @@ export default function LogWorkout() {
           if (w > 0 && r > 0) {
             const histPR = getPR(updatedEx.name, state.sessions);
             const sessionBest = sessionBestRef.current.get(updatedEx.name.toLowerCase());
-
             const beatsHistorical = !histPR || w > histPR.weight || (w === histPR.weight && r > histPR.reps);
             const beatsSession = !sessionBest || w > sessionBest.weight || (w === sessionBest.weight && r > sessionBest.reps);
-
             if (beatsHistorical && beatsSession) {
               sessionBestRef.current.set(updatedEx.name.toLowerCase(), { weight: w, reps: r });
               setTimeout(() => setNewPR({ exerciseName: updatedEx.name, weight: w, reps: r }), 0);
@@ -228,11 +286,13 @@ export default function LogWorkout() {
           </div>
         )}
 
-        {/* Header */}
+        {/* Back button */}
         <button
-          onClick={() => exerciseIndex === 0 ? setStep('muscle') : setExerciseIndex((i) => i - 1)}
+          onClick={() => exerciseIndex === 0 ? setStep('order') : setExerciseIndex((i) => i - 1)}
           className="self-start text-gray-400 hover:text-white text-2xl leading-none mb-4"
         >←</button>
+
+        {/* Header */}
         <div className="text-xs font-bold text-gray-500 tracking-widest text-center mb-1">
           {MUSCLE_GROUPS[muscleGroup].label.toUpperCase()} · Exercise {exerciseIndex + 1} of {exerciseStates.length}
         </div>
@@ -248,15 +308,21 @@ export default function LogWorkout() {
           <span>▶</span> Watch Form on YouTube
         </a>
 
-        {/* PR Badge */}
+        {/* PR Badge or Beginner Suggestion */}
         {pr ? (
           <div className="bg-stone-900 border border-amber-800 rounded-xl px-4 py-3 flex items-center justify-between mb-5">
             <div className="text-xs font-bold text-stone-500 tracking-widest">🏆 PR</div>
             <div className="text-amber-400 text-lg font-extrabold">{pr.weight} lbs × {pr.reps}</div>
           </div>
         ) : (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-center text-gray-600 text-sm mb-5">
-            No PR yet — set one today!
+          <div className="bg-gray-900 border border-indigo-900 rounded-xl px-4 py-3 mb-5">
+            <div className="text-xs font-bold text-indigo-500 tracking-widest mb-1">💡 BEGINNER START</div>
+            <div className="text-white font-extrabold text-lg">
+              {exDef?.beginnerNote === 'bodyweight'
+                ? `Bodyweight × ${exDef.beginnerReps}`
+                : `${exDef?.beginnerWeight} lbs × ${exDef?.beginnerReps}`}
+            </div>
+            <div className="text-gray-500 text-xs mt-0.5">Good starting point — adjust as needed</div>
           </div>
         )}
 
@@ -288,7 +354,7 @@ export default function LogWorkout() {
                   <input
                     type="number"
                     inputMode="decimal"
-                    placeholder={pr ? String(pr.weight) : '0'}
+                    placeholder={pr ? String(pr.weight) : exDef?.beginnerNote === 'bodyweight' ? '0' : String(exDef?.beginnerWeight ?? 0)}
                     value={log?.weight ?? ''}
                     disabled={isPending}
                     onChange={(e) => updateSetLog(setIdx, 'weight', e.target.value)}
@@ -306,7 +372,7 @@ export default function LogWorkout() {
                   <input
                     type="number"
                     inputMode="numeric"
-                    placeholder="—"
+                    placeholder={pr ? String(pr.reps) : String(exDef?.beginnerReps ?? 8)}
                     value={log?.reps ?? ''}
                     disabled={isPending}
                     onChange={(e) => updateSetLog(setIdx, 'reps', e.target.value)}
