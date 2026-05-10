@@ -14,6 +14,7 @@ export interface Exercise {
   weight: number;
   weightUnit: 'lbs' | 'kg';
   progressionUnlocked: boolean;
+  setLogs?: { weight: number; reps: number }[];
 }
 
 export interface WorkoutSession {
