@@ -5,6 +5,7 @@ import type { Split, MuscleGroup } from '../constants/muscleGroups';
 import { useApp } from '../context/AppContext';
 import { getPR } from '../lib/pr';
 import type { PRRecord } from '../lib/pr';
+import NewPRToast from '../components/ui/NewPRToast';
 
 interface SetLog { weight: string; reps: string; }
 interface ExerciseState {
@@ -26,6 +27,7 @@ export default function LogWorkout() {
   const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>([]);
   const [skipConfirming, setSkipConfirming] = useState(false);
   const [skipCount, setSkipCount] = useState(0);
+  const [newPR, setNewPR] = useState<{ exerciseName: string; weight: number; reps: number } | null>(null);
 
   useEffect(() => {
     if (muscleGroup) {
@@ -103,16 +105,34 @@ export default function LogWorkout() {
     const activeSetIndex = ex.logs.findIndex((l) => l === null || l.weight === '' || l.reps === '');
 
     function updateSetLog(setIdx: number, field: 'weight' | 'reps', value: string) {
-      setExerciseStates((prev) =>
-        prev.map((e, i) => {
+      setExerciseStates((prev) => {
+        const updated = prev.map((e, i) => {
           if (i !== exerciseIndex) return e;
           const logs = e.logs.map((l, li) => {
             if (li !== setIdx) return l;
             return { ...(l ?? { weight: '', reps: '' }), [field]: value };
           });
           return { ...e, logs };
-        })
-      );
+        });
+
+        // Check for new PR when both weight and reps are filled
+        const updatedEx = updated[exerciseIndex];
+        const log = updatedEx.logs[setIdx];
+        if (log && log.weight !== '' && log.reps !== '') {
+          const w = parseFloat(log.weight);
+          const r = parseInt(log.reps);
+          if (w > 0 && r > 0) {
+            const currentPR = getPR(updatedEx.name, state.sessions);
+            const beatsWeight = !currentPR || w > currentPR.weight;
+            const beatsReps = currentPR && w === currentPR.weight && r > currentPR.reps;
+            if (beatsWeight || beatsReps) {
+              setTimeout(() => setNewPR({ exerciseName: updatedEx.name, weight: w, reps: r }), 0);
+            }
+          }
+        }
+
+        return updated;
+      });
     }
 
     function saveWorkout(penalty = 0) {
@@ -168,6 +188,15 @@ export default function LogWorkout() {
 
     return (
       <div className="flex flex-col px-5 py-8 max-w-sm mx-auto min-h-screen">
+        {newPR && (
+          <NewPRToast
+            exerciseName={newPR.exerciseName}
+            weight={newPR.weight}
+            reps={newPR.reps}
+            onDismiss={() => setNewPR(null)}
+          />
+        )}
+
         {/* Skip confirmation overlay */}
         {skipConfirming && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
