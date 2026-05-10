@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getRecentPRs } from '../lib/pr';
-import { LEVEL_THRESHOLDS } from '../constants/levels';
+import { getLevelProgress } from '../lib/levelUtils';
 
 export default function Dashboard() {
   const { state } = useApp();
@@ -10,11 +10,8 @@ export default function Dashboard() {
 
   const recentPRs = getRecentPRs(sessions, 3);
 
-  const levelFloor = LEVEL_THRESHOLDS[profile.level - 1] ?? 0;
-  const levelCeiling = LEVEL_THRESHOLDS[profile.level] ?? levelFloor + 100;
-  const xpInLevel = profile.totalXP - levelFloor;
-  const xpNeeded = levelCeiling - levelFloor;
-  const percent = Math.min(100, Math.round((xpInLevel / xpNeeded) * 100));
+  const { current: xpInLevel, ceiling, floor, percent } = getLevelProgress(profile.totalXP);
+  const xpNeeded = ceiling - floor;
 
   return (
     <div className="flex flex-col items-center px-4 py-6 max-w-sm mx-auto gap-4">
