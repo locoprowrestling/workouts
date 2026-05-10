@@ -86,4 +86,5 @@ export interface AppStorage {
   quests: Quest[];
   lastQuestResetDate: string;
   completedQuestCount: number;
+  seenIntermediatePlanUnlock: boolean;
 }

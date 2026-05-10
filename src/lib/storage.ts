@@ -30,6 +30,7 @@ export function loadStorage(): AppStorage {
     quests: generateQuests(now),
     lastQuestResetDate: now.toISOString(),
     completedQuestCount: 0,
+    seenIntermediatePlanUnlock: false,
   };
 }
 

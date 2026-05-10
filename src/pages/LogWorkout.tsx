@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MUSCLE_GROUPS, UPPER_GROUPS, LOWER_GROUPS } from '../constants/muscleGroups';
-import type { Split, MuscleGroup, ExerciseDef } from '../constants/muscleGroups';
+import type { Split, MuscleGroup } from '../constants/muscleGroups';
+import { INTERMEDIATE_DAYS, INTERMEDIATE_UNLOCK_LEVEL } from '../constants/intermediatePlan';
+import type { IntermediateDayId } from '../constants/intermediatePlan';
 import { useApp } from '../context/AppContext';
 import { getPR } from '../lib/pr';
 import type { PRRecord } from '../lib/pr';
@@ -15,6 +17,15 @@ interface ExerciseState {
   skipped: boolean;
 }
 
+interface UnifiedExerciseDef {
+  name: string;
+  sets: number;
+  beginnerWeight: number;
+  beginnerNote?: string;
+  targetMinReps: number;
+  targetMaxReps: number;
+}
+
 type Step = 'split' | 'muscle' | 'order' | 'exercise';
 
 export default function LogWorkout() {
@@ -22,7 +33,8 @@ export default function LogWorkout() {
   const [step, setStep] = useState<Step>('split');
   const [split, setSplit] = useState<Split | null>(null);
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup | null>(null);
-  const [orderedExercises, setOrderedExercises] = useState<ExerciseDef[]>([]);
+  const [intermediateDay, setIntermediateDay] = useState<IntermediateDayId | null>(null);
+  const [orderedExercises, setOrderedExercises] = useState<UnifiedExerciseDef[]>([]);
   const { state, addWorkout } = useApp();
   const [exerciseIndex, setExerciseIndex] = useState(0);
   const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>([]);
@@ -31,9 +43,20 @@ export default function LogWorkout() {
   const [newPR, setNewPR] = useState<{ exerciseName: string; weight: number; reps: number } | null>(null);
   const sessionBestRef = useRef<Map<string, { weight: number; reps: number }>>(new Map());
 
+  const { profile } = state;
+  const isIntermediate = profile.level >= INTERMEDIATE_UNLOCK_LEVEL;
+
   useEffect(() => {
     if (muscleGroup) {
-      setOrderedExercises([...MUSCLE_GROUPS[muscleGroup].exercises]);
+      const unified: UnifiedExerciseDef[] = MUSCLE_GROUPS[muscleGroup].exercises.map((ex) => ({
+        name: ex.name,
+        sets: ex.sets,
+        beginnerWeight: ex.beginnerWeight,
+        beginnerNote: ex.beginnerNote,
+        targetMinReps: ex.beginnerReps,
+        targetMaxReps: ex.beginnerReps,
+      }));
+      setOrderedExercises(unified);
       setStep('order');
     }
   }, [muscleGroup]);
@@ -64,14 +87,50 @@ export default function LogWorkout() {
     setStep('muscle');
   }
 
+  function handleIntermediateDaySelect(dayId: IntermediateDayId) {
+    const day = INTERMEDIATE_DAYS.find((d) => d.id === dayId)!;
+    const unified: UnifiedExerciseDef[] = day.exercises.map((ex) => ({
+      name: ex.name,
+      sets: ex.sets,
+      beginnerWeight: ex.beginnerWeight,
+      beginnerNote: ex.beginnerNote,
+      targetMinReps: ex.targetMinReps,
+      targetMaxReps: ex.targetMaxReps,
+    }));
+    setIntermediateDay(dayId);
+    setOrderedExercises(unified);
+    setStep('order');
+  }
+
   function handleMuscleSelect(mg: MuscleGroup) {
     setMuscleGroup(mg);
   }
 
   const groups = split === 'upper' ? UPPER_GROUPS : LOWER_GROUPS;
 
-  // ── Split screen ──────────────────────────────────────────────────────────
+  // ── Split / Day picker screen ──────────────────────────────────────────────
   if (step === 'split') {
+    if (isIntermediate) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-3">
+          <button onClick={() => navigate('/')} className="absolute top-5 left-5 text-gray-400 hover:text-white text-2xl leading-none">←</button>
+          <div className="text-2xl font-extrabold text-white mb-1">Today's Workout</div>
+          <div className="text-xs font-bold text-indigo-400 tracking-widest mb-3">INTERMEDIATE PLAN</div>
+          {INTERMEDIATE_DAYS.map((day) => (
+            <button
+              key={day.id}
+              onClick={() => handleIntermediateDaySelect(day.id)}
+              className="w-full bg-gray-900 hover:bg-gray-800 border-2 border-gray-700 hover:border-indigo-700 rounded-2xl px-6 py-5 text-left transition-colors"
+            >
+              <div className="text-xs font-bold text-indigo-400 tracking-widest">{day.tag}</div>
+              <div className="text-white font-extrabold text-xl">{day.name}</div>
+              <div className="text-gray-500 text-sm">{day.focus}</div>
+            </button>
+          ))}
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
         <button onClick={() => navigate('/')} className="absolute top-5 left-5 text-gray-400 hover:text-white text-2xl leading-none">←</button>
@@ -92,7 +151,7 @@ export default function LogWorkout() {
     );
   }
 
-  // ── Muscle group screen ───────────────────────────────────────────────────
+  // ── Muscle group screen (beginner only) ───────────────────────────────────
   if (step === 'muscle') {
     return (
       <div className="flex flex-col items-center px-6 py-10 gap-3 max-w-sm mx-auto">
@@ -113,12 +172,19 @@ export default function LogWorkout() {
   }
 
   // ── Order screen ──────────────────────────────────────────────────────────
-  if (step === 'order' && muscleGroup) {
+  if (step === 'order' && (muscleGroup || intermediateDay)) {
+    const displayLabel = intermediateDay
+      ? (INTERMEDIATE_DAYS.find((d) => d.id === intermediateDay)?.name ?? '')
+      : (muscleGroup ? MUSCLE_GROUPS[muscleGroup].label : '');
+
     return (
       <div className="flex flex-col px-6 py-10 max-w-sm mx-auto gap-4">
-        <button onClick={() => setStep('muscle')} className="self-start text-gray-400 hover:text-white text-2xl leading-none">←</button>
+        <button
+          onClick={() => setStep(intermediateDay ? 'split' : 'muscle')}
+          className="self-start text-gray-400 hover:text-white text-2xl leading-none"
+        >←</button>
         <div>
-          <div className="text-xs font-bold text-gray-500 tracking-widest">{MUSCLE_GROUPS[muscleGroup].label.toUpperCase()}</div>
+          <div className="text-xs font-bold text-gray-500 tracking-widest">{displayLabel.toUpperCase()}</div>
           <div className="text-2xl font-extrabold text-white mt-1">Exercise Order</div>
           <div className="text-sm text-gray-500 mt-1">Drag to reorder, or tap ↑↓ for variety</div>
         </div>
@@ -139,7 +205,7 @@ export default function LogWorkout() {
               </div>
               <div className="flex-1">
                 <div className="font-bold text-white text-sm">{ex.name}</div>
-                <div className="text-xs text-gray-500">{ex.sets} sets</div>
+                <div className="text-xs text-gray-500">{ex.sets} sets · {ex.targetMinReps}{ex.targetMinReps !== ex.targetMaxReps ? `–${ex.targetMaxReps}` : ''} reps</div>
               </div>
               <div className="text-xs text-gray-600 font-mono">{i + 1}</div>
             </div>
@@ -156,7 +222,7 @@ export default function LogWorkout() {
   }
 
   // ── Exercise screen ───────────────────────────────────────────────────────
-  if (step === 'exercise' && muscleGroup) {
+  if (step === 'exercise' && (muscleGroup || intermediateDay)) {
     const ex = exerciseStates[exerciseIndex];
     if (!ex) return null;
 
@@ -166,7 +232,23 @@ export default function LogWorkout() {
     const nextPR: PRRecord | null = nextEx ? getPR(nextEx.name, state.sessions) : null;
     const isLast = exerciseIndex === exerciseStates.length - 1;
 
+    const displayLabel = intermediateDay
+      ? (INTERMEDIATE_DAYS.find((d) => d.id === intermediateDay)?.name ?? '')
+      : (muscleGroup ? MUSCLE_GROUPS[muscleGroup].label : '');
+
     const activeSetIndex = ex.logs.findIndex((l) => l === null || l.weight === '' || l.reps === '');
+
+    const repRange = exDef.targetMinReps === exDef.targetMaxReps
+      ? String(exDef.targetMinReps)
+      : `${exDef.targetMinReps}–${exDef.targetMaxReps}`;
+
+    const beginnerSuggestion = exDef.beginnerNote === 'bodyweight'
+      ? `Bodyweight × ${repRange}`
+      : `${exDef.beginnerWeight} lbs × ${repRange}`;
+
+    const beginnerNoteText = exDef.beginnerNote && exDef.beginnerNote !== 'bodyweight'
+      ? exDef.beginnerNote
+      : null;
 
     function updateSetLog(setIdx: number, field: 'weight' | 'reps', value: string) {
       setExerciseStates((prev) => {
@@ -201,17 +283,17 @@ export default function LogWorkout() {
     }
 
     function saveWorkout(penalty = 0) {
-      if (!split || !muscleGroup) return;
-      const exercises = exerciseStates.map((ex) => {
-        const filledLogs = ex.logs.filter((l): l is SetLog => l !== null);
+      const exercises = exerciseStates.map((e) => {
+        const filledLogs = e.logs.filter((l): l is SetLog => l !== null);
+        const exD = orderedExercises.find((o) => o.name === e.name);
         return {
           id: crypto.randomUUID(),
-          name: ex.name,
-          sets: ex.sets,
+          name: e.name,
+          sets: e.sets,
           reps: filledLogs.length > 0 ? Math.max(...filledLogs.map((l) => parseInt(l.reps) || 0)) : 0,
           weight: filledLogs.length > 0 ? Math.max(...filledLogs.map((l) => parseFloat(l.weight) || 0)) : 0,
-          targetMinReps: 8,
-          targetMaxReps: 12,
+          targetMinReps: exD?.targetMinReps ?? 8,
+          targetMaxReps: exD?.targetMaxReps ?? 12,
           weightUnit: 'lbs' as const,
           progressionUnlocked: false,
           setLogs: filledLogs.map((l) => ({ weight: parseFloat(l.weight) || 0, reps: parseInt(l.reps) || 0 })),
@@ -294,7 +376,7 @@ export default function LogWorkout() {
 
         {/* Header */}
         <div className="text-xs font-bold text-gray-500 tracking-widest text-center mb-1">
-          {MUSCLE_GROUPS[muscleGroup].label.toUpperCase()} · Exercise {exerciseIndex + 1} of {exerciseStates.length}
+          {displayLabel.toUpperCase()} · Exercise {exerciseIndex + 1} of {exerciseStates.length}
         </div>
         <div className="text-xl font-extrabold text-white text-center mb-3">{ex.name}</div>
 
@@ -317,12 +399,11 @@ export default function LogWorkout() {
         ) : (
           <div className="bg-gray-900 border border-indigo-900 rounded-xl px-4 py-3 mb-5">
             <div className="text-xs font-bold text-indigo-500 tracking-widest mb-1">💡 BEGINNER START</div>
-            <div className="text-white font-extrabold text-lg">
-              {exDef?.beginnerNote === 'bodyweight'
-                ? `Bodyweight × ${exDef.beginnerReps}`
-                : `${exDef?.beginnerWeight} lbs × ${exDef?.beginnerReps}`}
-            </div>
-            <div className="text-gray-500 text-xs mt-0.5">Good starting point — adjust as needed</div>
+            <div className="text-white font-extrabold text-lg">{beginnerSuggestion}</div>
+            {beginnerNoteText && (
+              <div className="text-gray-500 text-xs mt-0.5">{beginnerNoteText}</div>
+            )}
+            <div className="text-gray-600 text-xs mt-0.5">Good starting point — adjust as needed</div>
           </div>
         )}
 
@@ -354,7 +435,7 @@ export default function LogWorkout() {
                   <input
                     type="number"
                     inputMode="decimal"
-                    placeholder={pr ? String(pr.weight) : exDef?.beginnerNote === 'bodyweight' ? '0' : String(exDef?.beginnerWeight ?? 0)}
+                    placeholder={pr ? String(pr.weight) : exDef.beginnerNote === 'bodyweight' ? '0' : String(exDef.beginnerWeight)}
                     value={log?.weight ?? ''}
                     disabled={isPending}
                     onChange={(e) => updateSetLog(setIdx, 'weight', e.target.value)}
@@ -372,7 +453,7 @@ export default function LogWorkout() {
                   <input
                     type="number"
                     inputMode="numeric"
-                    placeholder={pr ? String(pr.reps) : String(exDef?.beginnerReps ?? 8)}
+                    placeholder={pr ? String(pr.reps) : String(exDef.targetMinReps)}
                     value={log?.reps ?? ''}
                     disabled={isPending}
                     onChange={(e) => updateSetLog(setIdx, 'reps', e.target.value)}
