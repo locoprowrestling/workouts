@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 import type { AppStorage, WorkoutSession, UserProfile } from '../types';
 import { loadStorage, saveStorage } from '../lib/storage';
+import { BADGE_DEFINITIONS } from '../constants/badges';
+import { generateQuests } from '../constants/quests';
 import { calculateXP } from '../lib/xp';
 import { evaluateStreak } from '../lib/streaks';
 import { evaluateBadges } from '../lib/badges';
@@ -15,7 +17,8 @@ type Action =
   | { type: 'ADD_WORKOUT'; session: Omit<WorkoutSession, 'id' | 'xpEarned'>; xpPenalty?: number }
   | { type: 'DISMISS_BADGE' }
   | { type: 'DISMISS_INTERMEDIATE_UNLOCK' }
-  | { type: 'RESET_QUESTS_IF_NEEDED' };
+  | { type: 'RESET_QUESTS_IF_NEEDED' }
+  | { type: 'IMPORT_STORAGE'; data: AppStorage };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -81,6 +84,22 @@ function reducer(state: AppState, action: Action): AppState {
       return next;
     }
 
+    case 'IMPORT_STORAGE': {
+      const imported = action.data;
+      // Patch any missing fields that might not exist in older backups
+      if (!imported.seenIntermediatePlanUnlock) imported.seenIntermediatePlanUnlock = false;
+      if (!imported.quests || imported.quests.length === 0) {
+        imported.quests = generateQuests(new Date());
+        imported.lastQuestResetDate = new Date().toISOString();
+      }
+      if (!imported.profile.badges || imported.profile.badges.length === 0) {
+        imported.profile.badges = BADGE_DEFINITIONS.map((b) => ({ id: b.id, unlockedAt: null }));
+      }
+      const next: AppState = { ...imported, badgeQueue: [] };
+      saveStorage(next);
+      return next;
+    }
+
     default:
       return state;
   }
@@ -91,6 +110,7 @@ interface AppContextValue {
   addWorkout: (session: Omit<WorkoutSession, 'id' | 'xpEarned'>, xpPenalty?: number) => void;
   dismissBadge: () => void;
   dismissIntermediateUnlock: () => void;
+  importStorage: (data: AppStorage) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -115,9 +135,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const dismissBadge = useCallback(() => dispatch({ type: 'DISMISS_BADGE' }), []);
   const dismissIntermediateUnlock = useCallback(() => dispatch({ type: 'DISMISS_INTERMEDIATE_UNLOCK' }), []);
+  const importStorage = useCallback((data: AppStorage) => dispatch({ type: 'IMPORT_STORAGE', data }), []);
 
   return (
-    <AppContext.Provider value={{ state, addWorkout, dismissBadge, dismissIntermediateUnlock }}>
+    <AppContext.Provider value={{ state, addWorkout, dismissBadge, dismissIntermediateUnlock, importStorage }}>
       {children}
     </AppContext.Provider>
   );
