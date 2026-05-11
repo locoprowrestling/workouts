@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CloudUpload } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getRecentPRs } from '../lib/pr';
 import { getLevelProgress } from '../lib/levelUtils';
 import { INTERMEDIATE_UNLOCK_LEVEL } from '../constants/intermediatePlan';
+import SyncModal from '../components/ui/SyncModal';
 
 export default function Dashboard() {
   const { state, dismissIntermediateUnlock } = useApp();
   const navigate = useNavigate();
+  const [syncOpen, setSyncOpen] = useState(false);
   const { profile, sessions, seenIntermediatePlanUnlock } = state;
 
   const recentPRs = getRecentPRs(sessions, 3);
@@ -18,7 +22,17 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col items-center px-4 py-6 max-w-sm mx-auto gap-4">
-      <div className="w-full text-2xl font-extrabold text-white">Hey! 💪</div>
+      <div className="w-full flex items-center justify-between">
+        <div className="text-2xl font-extrabold text-white">Hey! 💪</div>
+        <button
+          onClick={() => setSyncOpen(true)}
+          className="text-gray-500 hover:text-gray-300 transition-colors p-1"
+          aria-label="Backup & Sync"
+        >
+          <CloudUpload size={22} />
+        </button>
+      </div>
+      {syncOpen && <SyncModal onClose={() => setSyncOpen(false)} />}
 
       {/* Intermediate plan unlock banner */}
       {showIntermediateUnlock && (
