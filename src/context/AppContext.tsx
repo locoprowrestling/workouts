@@ -3,8 +3,8 @@ import type { AppStorage, WorkoutSession, UserProfile } from '../types';
 import { defaultStorage, loadUserData, saveUserData } from '../lib/storage';
 import { calculateXP } from '../lib/xp';
 import { evaluateStreak } from '../lib/streaks';
-import { evaluateBadges } from '../lib/badges';
-import { updateQuestProgress, shouldResetQuests, resetAndRegenerateQuests } from '../lib/quests';
+import { evaluateBadges, recomputeBadges } from '../lib/badges';
+import { updateQuestProgress, recomputeQuestProgress, shouldResetQuests, resetAndRegenerateQuests } from '../lib/quests';
 import { getLevelFromXP } from '../lib/levelUtils';
 
 interface AppState extends AppStorage {
@@ -94,9 +94,11 @@ function reducer(state: AppState, action: Action): AppState {
       const streakUpdate = evaluateStreak(updatedProfile, sessions);
       updatedProfile = { ...updatedProfile, ...streakUpdate };
 
-      const { quests: updatedQuests } = updateQuestProgress(state.quests, sessions);
+      const { quests: updatedQuests, completedQuestCount } = recomputeQuestProgress(state.quests, sessions);
+      const updatedBadges = recomputeBadges(updatedProfile, sessions, completedQuestCount);
+      updatedProfile = { ...updatedProfile, badges: updatedBadges };
 
-      return { ...state, profile: updatedProfile, sessions, quests: updatedQuests };
+      return { ...state, profile: updatedProfile, sessions, quests: updatedQuests, completedQuestCount };
     }
 
     case 'DISMISS_BADGE':
