@@ -15,6 +15,7 @@ type Action =
   | { type: 'LOAD_DATA'; data: AppStorage }
   | { type: 'ADD_WORKOUT'; session: Omit<WorkoutSession, 'id' | 'xpEarned'>; xpPenalty?: number }
   | { type: 'DELETE_WORKOUT'; id: string }
+  | { type: 'SET_NAME'; name: string }
   | { type: 'DISMISS_BADGE' }
   | { type: 'DISMISS_INTERMEDIATE_UNLOCK' }
   | { type: 'RESET_QUESTS_IF_NEEDED' };
@@ -110,6 +111,9 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, profile: updatedProfile, sessions, quests: updatedQuests, completedQuestCount };
     }
 
+    case 'SET_NAME':
+      return { ...state, profile: { ...state.profile, name: action.name } };
+
     case 'DISMISS_BADGE':
       return { ...state, badgeQueue: state.badgeQueue.slice(1) };
 
@@ -125,6 +129,7 @@ interface AppContextValue {
   state: AppState;
   addWorkout: (session: Omit<WorkoutSession, 'id' | 'xpEarned'>, xpPenalty?: number) => void;
   deleteWorkout: (id: string) => void;
+  setName: (name: string) => void;
   dismissBadge: () => void;
   dismissIntermediateUnlock: () => void;
 }
@@ -163,6 +168,10 @@ export function AppProvider({ children, userId }: { children: React.ReactNode; u
     dispatch({ type: 'DELETE_WORKOUT', id });
   }, []);
 
+  const setName = useCallback((name: string) => {
+    dispatch({ type: 'SET_NAME', name });
+  }, []);
+
   const dismissBadge = useCallback(() => dispatch({ type: 'DISMISS_BADGE' }), []);
   const dismissIntermediateUnlock = useCallback(() => dispatch({ type: 'DISMISS_INTERMEDIATE_UNLOCK' }), []);
 
@@ -175,7 +184,7 @@ export function AppProvider({ children, userId }: { children: React.ReactNode; u
   }
 
   return (
-    <AppContext.Provider value={{ state, addWorkout, deleteWorkout, dismissBadge, dismissIntermediateUnlock }}>
+    <AppContext.Provider value={{ state, addWorkout, deleteWorkout, setName, dismissBadge, dismissIntermediateUnlock }}>
       {children}
     </AppContext.Provider>
   );

@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getRecentPRs } from '../lib/pr';
@@ -5,9 +6,28 @@ import { getLevelProgress } from '../lib/levelUtils';
 import { INTERMEDIATE_UNLOCK_LEVEL } from '../constants/intermediatePlan';
 
 export default function Dashboard() {
-  const { state, dismissIntermediateUnlock } = useApp();
+  const { state, setName, dismissIntermediateUnlock } = useApp();
   const navigate = useNavigate();
   const { profile, sessions, seenIntermediatePlanUnlock } = state;
+
+  const [editingName, setEditingName] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingName) inputRef.current?.focus();
+  }, [editingName]);
+
+  function startEdit() {
+    setDraft(profile.name);
+    setEditingName(true);
+  }
+
+  function commitEdit() {
+    const trimmed = draft.trim();
+    setName(trimmed);
+    setEditingName(false);
+  }
 
   const recentPRs = getRecentPRs(sessions, 3);
   const { current: xpInLevel, ceiling, floor, percent } = getLevelProgress(profile.totalXP);
@@ -18,7 +38,28 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col items-center px-4 py-6 max-w-sm mx-auto gap-4">
-      <div className="w-full text-2xl font-extrabold text-white">Hey! 💪</div>
+      <div className="w-full text-2xl font-extrabold text-white flex items-center gap-2">
+        {editingName ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingName(false); }}
+            placeholder="Your name"
+            className="bg-transparent border-b border-indigo-500 outline-none text-white text-2xl font-extrabold w-40 placeholder-gray-600"
+          />
+        ) : (
+          <button onClick={startEdit} className="flex items-center gap-2 group">
+            <span>
+              Hey{profile.name ? `, ${profile.name}` : ''}! 💪
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600 group-hover:text-gray-400 transition-colors mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* Intermediate plan unlock banner */}
       {showIntermediateUnlock && (

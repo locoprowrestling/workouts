@@ -7,6 +7,7 @@ export function defaultStorage(): AppStorage {
   const now = new Date();
   return {
     profile: {
+      name: '',
       level: 1,
       totalXP: 0,
       currentStreak: 0,
@@ -37,6 +38,9 @@ export async function loadUserData(userId: string): Promise<AppStorage> {
   const stored = data.data as AppStorage;
   if (stored.seenIntermediatePlanUnlock === undefined) {
     stored.seenIntermediatePlanUnlock = false;
+  }
+  if (stored.profile.name === undefined) {
+    stored.profile.name = '';
   }
   return stored;
 }

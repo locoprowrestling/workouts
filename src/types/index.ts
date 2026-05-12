@@ -30,6 +30,7 @@ export interface WorkoutSession {
 }
 
 export interface UserProfile {
+  name: string;
   level: number;
   totalXP: number;
   currentStreak: number;
