@@ -21,8 +21,17 @@ type Action =
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'LOAD_DATA':
-      return { ...action.data, badgeQueue: [] };
+    case 'LOAD_DATA': {
+      const { quests, completedQuestCount } = recomputeQuestProgress(action.data.quests, action.data.sessions);
+      const badges = recomputeBadges(action.data.profile, action.data.sessions, completedQuestCount);
+      return {
+        ...action.data,
+        profile: { ...action.data.profile, badges },
+        quests,
+        completedQuestCount,
+        badgeQueue: [],
+      };
+    }
 
     case 'RESET_QUESTS_IF_NEEDED': {
       if (!shouldResetQuests(state.lastQuestResetDate)) return state;
