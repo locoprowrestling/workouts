@@ -25,7 +25,7 @@ export default function History() {
       <h1 className="text-2xl font-bold text-white">History</h1>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         {FILTERS.map((f) => (
           <button
             key={f.value}
