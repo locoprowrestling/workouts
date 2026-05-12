@@ -26,7 +26,8 @@ interface UnifiedExerciseDef {
   targetMaxReps: number;
 }
 
-type Step = 'split' | 'muscle' | 'order' | 'exercise';
+type Step = 'split' | 'muscle' | 'order' | 'exercise' | 'simple';
+type SimpleMode = 'cardio' | 'stretching';
 
 export default function LogWorkout() {
   const navigate = useNavigate();
@@ -35,6 +36,9 @@ export default function LogWorkout() {
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup | null>(null);
   const [intermediateDay, setIntermediateDay] = useState<IntermediateDayId | null>(null);
   const [orderedExercises, setOrderedExercises] = useState<UnifiedExerciseDef[]>([]);
+  const [simpleMode, setSimpleMode] = useState<SimpleMode | null>(null);
+  const [simpleDuration, setSimpleDuration] = useState('30');
+  const [simpleNotes, setSimpleNotes] = useState('');
   const { state, addWorkout } = useApp();
   const [exerciseIndex, setExerciseIndex] = useState(0);
   const [exerciseStates, setExerciseStates] = useState<ExerciseState[]>([]);
@@ -106,6 +110,24 @@ export default function LogWorkout() {
     setMuscleGroup(mg);
   }
 
+  function handleSimpleModeSelect(mode: SimpleMode) {
+    setSimpleMode(mode);
+    setStep('simple');
+  }
+
+  function saveSimpleWorkout() {
+    addWorkout({
+      date: new Date().toISOString().split('T')[0],
+      type: simpleMode === 'cardio' ? 'cardio' : 'flexibility',
+      templateId: null,
+      durationMinutes: parseInt(simpleDuration) || 30,
+      exercises: [],
+      conditioningNotes: '',
+      notes: simpleNotes,
+    });
+    navigate('/');
+  }
+
   const groups = split === 'upper' ? UPPER_GROUPS : LOWER_GROUPS;
 
   // ── Split / Day picker screen ──────────────────────────────────────────────
@@ -127,6 +149,20 @@ export default function LogWorkout() {
               <div className="text-gray-500 text-sm">{day.focus}</div>
             </button>
           ))}
+          <div className="w-full flex gap-3 mt-1">
+            <button
+              onClick={() => handleSimpleModeSelect('cardio')}
+              className="flex-1 bg-gray-900 hover:bg-gray-800 text-emerald-400 border-2 border-gray-700 hover:border-emerald-700 font-extrabold text-lg py-5 rounded-2xl transition-colors"
+            >
+              🏃 CARDIO
+            </button>
+            <button
+              onClick={() => handleSimpleModeSelect('stretching')}
+              className="flex-1 bg-gray-900 hover:bg-gray-800 text-sky-400 border-2 border-gray-700 hover:border-sky-700 font-extrabold text-lg py-5 rounded-2xl transition-colors"
+            >
+              🧘 STRETCH
+            </button>
+          </div>
         </div>
       );
     }
@@ -147,6 +183,20 @@ export default function LogWorkout() {
         >
           LOWER
         </button>
+        <div className="w-full flex gap-3">
+          <button
+            onClick={() => handleSimpleModeSelect('cardio')}
+            className="flex-1 bg-gray-900 hover:bg-gray-800 text-emerald-400 border-2 border-gray-700 hover:border-emerald-700 font-extrabold text-xl py-8 rounded-2xl transition-colors"
+          >
+            🏃 CARDIO
+          </button>
+          <button
+            onClick={() => handleSimpleModeSelect('stretching')}
+            className="flex-1 bg-gray-900 hover:bg-gray-800 text-sky-400 border-2 border-gray-700 hover:border-sky-700 font-extrabold text-xl py-8 rounded-2xl transition-colors"
+          >
+            🧘 STRETCH
+          </button>
+        </div>
       </div>
     );
   }
@@ -494,6 +544,56 @@ export default function LogWorkout() {
           className="text-gray-600 text-sm font-medium mt-3 text-center w-full hover:text-gray-400 transition-colors"
         >
           Skip this exercise
+        </button>
+      </div>
+    );
+  }
+
+  // ── Cardio / Stretching screen ────────────────────────────────────────────
+  if (step === 'simple' && simpleMode) {
+    const isCardio = simpleMode === 'cardio';
+    const accentColor = isCardio ? 'emerald' : 'sky';
+    const label = isCardio ? 'Cardio' : 'Stretching';
+    const emoji = isCardio ? '🏃' : '🧘';
+    const xpNote = isCardio ? '40 base XP' : '30 base XP';
+
+    return (
+      <div className="flex flex-col px-6 py-10 max-w-sm mx-auto min-h-screen">
+        <button onClick={() => setStep('split')} className="self-start text-gray-400 hover:text-white text-2xl leading-none mb-6">←</button>
+
+        <div className={`text-xs font-bold tracking-widest mb-1 ${isCardio ? 'text-emerald-400' : 'text-sky-400'}`}>
+          {emoji} {label.toUpperCase()}
+        </div>
+        <div className="text-2xl font-extrabold text-white mb-1">Log Your Session</div>
+        <div className="text-xs text-gray-500 mb-8">{xpNote} + duration bonuses</div>
+
+        <div className="mb-6">
+          <label className="text-xs font-bold text-gray-500 tracking-widest block mb-2">DURATION (MINUTES)</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={simpleDuration}
+            onChange={(e) => setSimpleDuration(e.target.value)}
+            className={`w-full bg-gray-900 border-2 ${isCardio ? 'border-emerald-700 focus:border-emerald-500' : 'border-sky-700 focus:border-sky-500'} rounded-2xl text-white text-center text-4xl font-extrabold py-6 outline-none`}
+          />
+        </div>
+
+        <div className="mb-8">
+          <label className="text-xs font-bold text-gray-500 tracking-widest block mb-2">NOTES (OPTIONAL)</label>
+          <textarea
+            value={simpleNotes}
+            onChange={(e) => setSimpleNotes(e.target.value)}
+            placeholder={isCardio ? 'e.g. 5k run, 150 bpm avg' : 'e.g. full body stretch, hip flexors'}
+            rows={3}
+            className="w-full bg-gray-900 border-2 border-gray-700 rounded-2xl text-white px-4 py-3 text-sm outline-none resize-none placeholder-gray-600"
+          />
+        </div>
+
+        <button
+          onClick={saveSimpleWorkout}
+          className={`w-full ${isCardio ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-sky-700 hover:bg-sky-600'} text-white font-extrabold text-lg py-5 rounded-2xl transition-colors mt-auto`}
+        >
+          Log {label} ✓
         </button>
       </div>
     );
