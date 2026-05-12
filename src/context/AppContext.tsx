@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef, useState } from 'react';
 import type { AppStorage, WorkoutSession, UserProfile } from '../types';
-import { loadStorage, saveStorage } from '../lib/storage';
+import { defaultStorage, loadUserData, saveUserData } from '../lib/storage';
 import { calculateXP } from '../lib/xp';
 import { evaluateStreak } from '../lib/streaks';
 import { evaluateBadges } from '../lib/badges';
@@ -12,6 +12,7 @@ interface AppState extends AppStorage {
 }
 
 type Action =
+  | { type: 'LOAD_DATA'; data: AppStorage }
   | { type: 'ADD_WORKOUT'; session: Omit<WorkoutSession, 'id' | 'xpEarned'>; xpPenalty?: number }
   | { type: 'DISMISS_BADGE' }
   | { type: 'DISMISS_INTERMEDIATE_UNLOCK' }
@@ -19,13 +20,14 @@ type Action =
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case 'LOAD_DATA':
+      return { ...action.data, badgeQueue: [] };
+
     case 'RESET_QUESTS_IF_NEEDED': {
       if (!shouldResetQuests(state.lastQuestResetDate)) return state;
       const now = new Date();
       const quests = resetAndRegenerateQuests(state.quests, now);
-      const next: AppState = { ...state, quests, lastQuestResetDate: now.toISOString() };
-      saveStorage(next);
-      return next;
+      return { ...state, quests, lastQuestResetDate: now.toISOString() };
     }
 
     case 'ADD_WORKOUT': {
@@ -60,7 +62,7 @@ function reducer(state: AppState, action: Action): AppState {
 
       const newBadges = evaluateBadges(updatedProfile, sessions, completedQuestCount);
 
-      const next: AppState = {
+      return {
         ...state,
         profile: updatedProfile,
         sessions,
@@ -68,18 +70,13 @@ function reducer(state: AppState, action: Action): AppState {
         completedQuestCount,
         badgeQueue: [...state.badgeQueue, ...newBadges],
       };
-      saveStorage(next);
-      return next;
     }
 
     case 'DISMISS_BADGE':
       return { ...state, badgeQueue: state.badgeQueue.slice(1) };
 
-    case 'DISMISS_INTERMEDIATE_UNLOCK': {
-      const next: AppState = { ...state, seenIntermediatePlanUnlock: true };
-      saveStorage(next);
-      return next;
-    }
+    case 'DISMISS_INTERMEDIATE_UNLOCK':
+      return { ...state, seenIntermediatePlanUnlock: true };
 
     default:
       return state;
@@ -95,19 +92,29 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, () => {
-    const stored = loadStorage();
-    // Patch existing stored data missing the new field
-    if (stored.seenIntermediatePlanUnlock === undefined) {
-      stored.seenIntermediatePlanUnlock = false;
-    }
-    return { ...stored, badgeQueue: [] };
-  });
+export function AppProvider({ children, userId }: { children: React.ReactNode; userId: string }) {
+  const [dataLoading, setDataLoading] = useState(true);
+  const [state, dispatch] = useReducer(reducer, { ...defaultStorage(), badgeQueue: [] });
+  const skipNextSaveRef = useRef(true);
 
   useEffect(() => {
-    dispatch({ type: 'RESET_QUESTS_IF_NEEDED' });
-  }, []);
+    setDataLoading(true);
+    skipNextSaveRef.current = true;
+    loadUserData(userId).then((data) => {
+      dispatch({ type: 'LOAD_DATA', data });
+      dispatch({ type: 'RESET_QUESTS_IF_NEEDED' });
+      setDataLoading(false);
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    if (dataLoading) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    saveUserData(userId, state);
+  }, [state, userId, dataLoading]);
 
   const addWorkout = useCallback((session: Omit<WorkoutSession, 'id' | 'xpEarned'>, xpPenalty?: number) => {
     dispatch({ type: 'ADD_WORKOUT', session, xpPenalty });
@@ -115,6 +122,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const dismissBadge = useCallback(() => dispatch({ type: 'DISMISS_BADGE' }), []);
   const dismissIntermediateUnlock = useCallback(() => dispatch({ type: 'DISMISS_INTERMEDIATE_UNLOCK' }), []);
+
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-gray-500 text-sm">Loading your data…</div>
+      </div>
+    );
+  }
 
   return (
     <AppContext.Provider value={{ state, addWorkout, dismissBadge, dismissIntermediateUnlock }}>

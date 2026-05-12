@@ -1,31 +1,22 @@
-import type { AppStorage, UserProfile } from '../types';
+import type { AppStorage } from '../types';
 import { BADGE_DEFINITIONS } from '../constants/badges';
 import { generateQuests } from '../constants/quests';
+import { supabase } from './supabase';
 
-const KEY = 'workout_tracker_v1';
-
-function defaultProfile(): UserProfile {
-  return {
-    level: 1,
-    totalXP: 0,
-    currentStreak: 0,
-    longestStreak: 0,
-    totalWorkouts: 0,
-    lastStreakWeek: null,
-    workoutTypeCounts: { strength: 0, cardio: 0, flexibility: 0 },
-    badges: BADGE_DEFINITIONS.map((b) => ({ id: b.id, unlockedAt: null })),
-    createdAt: new Date().toISOString(),
-  };
-}
-
-export function loadStorage(): AppStorage {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as AppStorage;
-  } catch {}
+export function defaultStorage(): AppStorage {
   const now = new Date();
   return {
-    profile: defaultProfile(),
+    profile: {
+      level: 1,
+      totalXP: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+      totalWorkouts: 0,
+      lastStreakWeek: null,
+      workoutTypeCounts: { strength: 0, cardio: 0, flexibility: 0 },
+      badges: BADGE_DEFINITIONS.map((b) => ({ id: b.id, unlockedAt: null })),
+      createdAt: now.toISOString(),
+    },
     sessions: [],
     quests: generateQuests(now),
     lastQuestResetDate: now.toISOString(),
@@ -34,6 +25,24 @@ export function loadStorage(): AppStorage {
   };
 }
 
-export function saveStorage(data: AppStorage): void {
-  localStorage.setItem(KEY, JSON.stringify(data));
+export async function loadUserData(userId: string): Promise<AppStorage> {
+  const { data, error } = await supabase
+    .from('user_data')
+    .select('data')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error || !data) return defaultStorage();
+
+  const stored = data.data as AppStorage;
+  if (stored.seenIntermediatePlanUnlock === undefined) {
+    stored.seenIntermediatePlanUnlock = false;
+  }
+  return stored;
+}
+
+export async function saveUserData(userId: string, data: AppStorage): Promise<void> {
+  await supabase
+    .from('user_data')
+    .upsert({ id: userId, data, updated_at: new Date().toISOString() });
 }
