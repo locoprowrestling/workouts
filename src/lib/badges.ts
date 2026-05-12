@@ -33,6 +33,21 @@ const CONDITIONS: BadgeCondition[] = [
   { id: 'quest_5', check: (_p, _s, count) => count >= 5 },
 ];
 
+export function recomputeBadges(
+  profile: UserProfile,
+  sessions: WorkoutSession[],
+  completedQuestCount: number
+): UserProfile['badges'] {
+  return profile.badges.map((badge) => {
+    if (!badge.unlockedAt) return badge;
+    const condition = CONDITIONS.find((c) => c.id === badge.id);
+    if (condition && !condition.check(profile, sessions, completedQuestCount)) {
+      return { ...badge, unlockedAt: null };
+    }
+    return badge;
+  });
+}
+
 export function evaluateBadges(
   profile: UserProfile,
   sessions: WorkoutSession[],

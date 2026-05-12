@@ -59,6 +59,18 @@ export function updateQuestProgress(quests: Quest[], sessions: WorkoutSession[])
   return { quests: updated, newlyCompleted };
 }
 
+export function recomputeQuestProgress(quests: Quest[], sessions: WorkoutSession[]): {
+  quests: Quest[];
+  completedQuestCount: number;
+} {
+  const updated = quests.map((quest) => {
+    const currentCount = countMatchingSessions(quest, sessions);
+    const completed = currentCount >= quest.goalCount;
+    return { ...quest, currentCount: Math.min(currentCount, quest.goalCount), completed };
+  });
+  return { quests: updated, completedQuestCount: updated.filter((q) => q.completed).length };
+}
+
 export function resetAndRegenerateQuests(
   existingQuests: Quest[],
   now: Date = new Date()
