@@ -14,6 +14,7 @@ interface AppState extends AppStorage {
 type Action =
   | { type: 'LOAD_DATA'; data: AppStorage }
   | { type: 'ADD_WORKOUT'; session: Omit<WorkoutSession, 'id' | 'xpEarned'>; xpPenalty?: number }
+  | { type: 'DELETE_WORKOUT'; id: string }
   | { type: 'DISMISS_BADGE' }
   | { type: 'DISMISS_INTERMEDIATE_UNLOCK' }
   | { type: 'RESET_QUESTS_IF_NEEDED' };
@@ -72,6 +73,32 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case 'DELETE_WORKOUT': {
+      const sessions = state.sessions.filter((s) => s.id !== action.id);
+
+      const totalXP = sessions.reduce((sum, s) => sum + s.xpEarned, 0);
+      const newLevel = getLevelFromXP(totalXP);
+      const totalWorkouts = sessions.length;
+      const workoutTypeCounts = sessions.reduce(
+        (acc, s) => ({ ...acc, [s.type]: (acc[s.type] ?? 0) + 1 }),
+        { strength: 0, cardio: 0, flexibility: 0 } as Record<string, number>
+      );
+
+      let updatedProfile: UserProfile = {
+        ...state.profile,
+        totalXP,
+        level: newLevel,
+        totalWorkouts,
+        workoutTypeCounts,
+      };
+      const streakUpdate = evaluateStreak(updatedProfile, sessions);
+      updatedProfile = { ...updatedProfile, ...streakUpdate };
+
+      const { quests: updatedQuests } = updateQuestProgress(state.quests, sessions);
+
+      return { ...state, profile: updatedProfile, sessions, quests: updatedQuests };
+    }
+
     case 'DISMISS_BADGE':
       return { ...state, badgeQueue: state.badgeQueue.slice(1) };
 
@@ -86,6 +113,7 @@ function reducer(state: AppState, action: Action): AppState {
 interface AppContextValue {
   state: AppState;
   addWorkout: (session: Omit<WorkoutSession, 'id' | 'xpEarned'>, xpPenalty?: number) => void;
+  deleteWorkout: (id: string) => void;
   dismissBadge: () => void;
   dismissIntermediateUnlock: () => void;
 }
@@ -120,6 +148,10 @@ export function AppProvider({ children, userId }: { children: React.ReactNode; u
     dispatch({ type: 'ADD_WORKOUT', session, xpPenalty });
   }, []);
 
+  const deleteWorkout = useCallback((id: string) => {
+    dispatch({ type: 'DELETE_WORKOUT', id });
+  }, []);
+
   const dismissBadge = useCallback(() => dispatch({ type: 'DISMISS_BADGE' }), []);
   const dismissIntermediateUnlock = useCallback(() => dispatch({ type: 'DISMISS_INTERMEDIATE_UNLOCK' }), []);
 
@@ -132,7 +164,7 @@ export function AppProvider({ children, userId }: { children: React.ReactNode; u
   }
 
   return (
-    <AppContext.Provider value={{ state, addWorkout, dismissBadge, dismissIntermediateUnlock }}>
+    <AppContext.Provider value={{ state, addWorkout, deleteWorkout, dismissBadge, dismissIntermediateUnlock }}>
       {children}
     </AppContext.Provider>
   );
