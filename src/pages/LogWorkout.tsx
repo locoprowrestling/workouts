@@ -134,7 +134,7 @@ export default function LogWorkout() {
   if (step === 'split') {
     if (isIntermediate) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-3">
+        <div className="flex flex-col items-center justify-center px-6 gap-3 py-8 min-h-[calc(100svh-120px)]">
           <button onClick={() => navigate('/')} className="absolute top-5 left-5 text-gray-400 hover:text-white text-2xl leading-none">←</button>
           <div className="text-2xl font-extrabold text-white mb-1">Today's Workout</div>
           <div className="text-xs font-bold text-indigo-400 tracking-widest mb-3">INTERMEDIATE PLAN</div>
@@ -142,7 +142,7 @@ export default function LogWorkout() {
             <button
               key={day.id}
               onClick={() => handleIntermediateDaySelect(day.id)}
-              className="w-full bg-gray-900 hover:bg-gray-800 border-2 border-gray-700 hover:border-indigo-700 rounded-2xl px-6 py-5 text-left transition-colors"
+              className="w-full bg-gray-900 hover:bg-gray-800 border-2 border-gray-700 hover:border-indigo-700 rounded-2xl px-6 py-4 text-left transition-colors"
             >
               <div className="text-xs font-bold text-indigo-400 tracking-widest">{day.tag}</div>
               <div className="text-white font-extrabold text-xl">{day.name}</div>
@@ -152,13 +152,13 @@ export default function LogWorkout() {
           <div className="w-full flex gap-3 mt-1">
             <button
               onClick={() => handleSimpleModeSelect('cardio')}
-              className="flex-1 bg-gray-900 hover:bg-gray-800 text-emerald-400 border-2 border-gray-700 hover:border-emerald-700 font-extrabold text-lg py-5 rounded-2xl transition-colors"
+              className="flex-1 bg-gray-900 hover:bg-gray-800 text-emerald-400 border-2 border-gray-700 hover:border-emerald-700 font-extrabold text-lg py-4 rounded-2xl transition-colors"
             >
               🏃 CARDIO
             </button>
             <button
               onClick={() => handleSimpleModeSelect('stretching')}
-              className="flex-1 bg-gray-900 hover:bg-gray-800 text-sky-400 border-2 border-gray-700 hover:border-sky-700 font-extrabold text-lg py-5 rounded-2xl transition-colors"
+              className="flex-1 bg-gray-900 hover:bg-gray-800 text-sky-400 border-2 border-gray-700 hover:border-sky-700 font-extrabold text-lg py-4 rounded-2xl transition-colors"
             >
               🧘 STRETCH
             </button>
@@ -168,31 +168,31 @@ export default function LogWorkout() {
     }
 
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 gap-4">
+      <div className="flex flex-col items-center justify-center px-6 gap-4 py-8 min-h-[calc(100svh-120px)]">
         <button onClick={() => navigate('/')} className="absolute top-5 left-5 text-gray-400 hover:text-white text-2xl leading-none">←</button>
-        <div className="text-2xl font-extrabold text-white mb-4">Today's Workout</div>
+        <div className="text-2xl font-extrabold text-white mb-2">Today's Workout</div>
         <button
           onClick={() => handleSplitSelect('upper')}
-          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-3xl py-14 rounded-2xl transition-colors tracking-wide"
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-3xl py-9 rounded-2xl transition-colors tracking-wide"
         >
           UPPER
         </button>
         <button
           onClick={() => handleSplitSelect('lower')}
-          className="w-full bg-gray-900 hover:bg-gray-800 text-gray-400 border-2 border-gray-700 font-extrabold text-3xl py-14 rounded-2xl transition-colors tracking-wide"
+          className="w-full bg-gray-900 hover:bg-gray-800 text-gray-400 border-2 border-gray-700 font-extrabold text-3xl py-9 rounded-2xl transition-colors tracking-wide"
         >
           LOWER
         </button>
         <div className="w-full flex gap-3">
           <button
             onClick={() => handleSimpleModeSelect('cardio')}
-            className="flex-1 bg-gray-900 hover:bg-gray-800 text-emerald-400 border-2 border-gray-700 hover:border-emerald-700 font-extrabold text-xl py-8 rounded-2xl transition-colors"
+            className="flex-1 bg-gray-900 hover:bg-gray-800 text-emerald-400 border-2 border-gray-700 hover:border-emerald-700 font-extrabold text-xl py-5 rounded-2xl transition-colors"
           >
             🏃 CARDIO
           </button>
           <button
             onClick={() => handleSimpleModeSelect('stretching')}
-            className="flex-1 bg-gray-900 hover:bg-gray-800 text-sky-400 border-2 border-gray-700 hover:border-sky-700 font-extrabold text-xl py-8 rounded-2xl transition-colors"
+            className="flex-1 bg-gray-900 hover:bg-gray-800 text-sky-400 border-2 border-gray-700 hover:border-sky-700 font-extrabold text-xl py-5 rounded-2xl transition-colors"
           >
             🧘 STRETCH
           </button>
